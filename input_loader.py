@@ -152,9 +152,9 @@ def loadRandomBatch(batch_size, img_width, light_poses, capture, empty_frames, r
 
     random_light_poses = getRandomLightPoses(light_poses, random_lights_num)
     random_backgorund_poses = getRandomBackgroundPoses(light_poses, \
-                                                       capture.get(cv2.CAP_PROP_FRAME_COUNT), \
-                                                       capture.get(cv2.CAP_PROP_FRAME_WIDTH), \
-                                                       capture.get(cv2.CAP_PROP_FRAME_HEIGHT), \
+                                                       capture.get(cv2.cv.CV_CAP_PROP_FRAME_COUNT), \
+                                                       capture.get(cv2.cv.CV_CAP_PROP_FRAME_WIDTH), \
+                                                       capture.get(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT), \
                                                        empty_frames, random_background_num, )
 
     # Generate common sorted list
@@ -222,8 +222,8 @@ def loadRandomPrerejectorBatch(batch_size, img_size, light_poses, capture, empty
     random_light_poses = getRandomLightPrerejectorPoses(light_poses, random_lights_num, img_size)
     random_backgorund_poses = getRandomBackgroundPrerejectorPoses(empty_frames, \
                                                                   random_background_num, img_size, \
-                                                                  capture.get(cv2.CAP_PROP_FRAME_WIDTH), \
-                                                                  capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+                                                                  capture.get(cv2.cv.CV_CAP_PROP_FRAME_WIDTH), \
+                                                                  capture.get(cv2.cv.CV_CAP_PROP_FRAME_HEIGHT))
 
     # Generate common sorted list
     batch_items = random_light_poses + random_backgorund_poses
@@ -238,7 +238,7 @@ def loadRandomPrerejectorBatch(batch_size, img_size, light_poses, capture, empty
     for item_idx in range(len(batch_items)):
         item = batch_items[item_idx]
         frame_idx = item['Frame number']
-        capture.set(cv2.CAP_PROP_POS_FRAMES, frame_idx)
+        capture.set(cv2.cv.CV_CAP_PROP_POS_FRAMES, frame_idx)
         ret, frame = capture.read()
         if not ret: continue
         item_roi = np.empty((1, 1, 3))
@@ -275,7 +275,7 @@ def init():
             if not capture.isOpened():
                 print('Unable to open ', video_file_name)
                 sys.exit()
-            capture_len = capture.get(cv2.CAP_PROP_FRAME_COUNT)
+            capture_len = capture.get(cv2.cv.CV_CAP_PROP_FRAME_COUNT)
             print('File loaded, contains', capture_len, 'frames')
 
             print('Generating list of capture frames with no lights')
@@ -287,12 +287,12 @@ def init():
 
             return light_poses, capture, empty_frames
 
-            ##Example usage
-            # light_poses, capture, empty_frames = init()
-            # print('Generating random batch')
-            # batch_x, batch_y = loadRandomPrerejectorBatch(10, 20, light_poses, capture, empty_frames)
-            # print('Random batch ready')
-            # print(batch_y)
-            # view = batch_x.reshape(200, 20, 3)
-            # cv2.imshow('View', view)
-            # cv2.waitKey()
+#Example usage
+# light_poses, capture, empty_frames = init()
+# print('Generating random batch')
+# batch_x, batch_y = loadRandomPrerejectorBatch(10, 20, light_poses, capture, empty_frames)
+# print('Random batch ready')
+# print(batch_y)
+# view = batch_x.reshape(200, 20, 3)
+# cv2.imshow('View', view)
+# cv2.waitKey()
