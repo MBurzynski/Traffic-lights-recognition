@@ -51,10 +51,30 @@ def clasify(features):
     features = np.reshape(features, (1, features.size))
     result_light = lights_svm.predict(features)
     result_color = 0
-    if result_light[1][0] == 1:
+    if result_light[1][0][0] == 1:
         result_color = color_svm.predict(features)
-        result_color = result_color[1][0]
+        result_color = result_color[1][0][0]
     return result_color
+
+
+def merge_bounding_boxes(boxes, frame, color):
+    boxes_out = []
+    big_box = boxes[0]
+    for box in boxes[1:]:
+        if box[0] <= big_box[2] and box[1] <= big_box[3] and box[3] >= big_box[1]:
+            big_box[0] = min(big_box[0], box[0])
+            big_box[1] = min(big_box[1], box[1])
+            big_box[2] = max(big_box[2], box[2])
+            big_box[3] = max(big_box[3], box[3])
+        else:
+            boxes_out.append(big_box)
+            cv2.rectangle(frame, (big_box[0], big_box[1]), (big_box[2], big_box[3]),
+                          color, 2)
+            big_box = box
+    boxes_out.append(big_box)
+    cv2.rectangle(frame, (big_box[0], big_box[1]), (big_box[2], big_box[3]),
+                  color, 2)
+    return boxes_out
 
 
 def weight_variable(shape, dev, name):
@@ -122,6 +142,8 @@ def detect(x_frame, frame_width, frame_height, frame_width_out, frame_height_out
 
     return y_out
 
+config = tf.ConfigProto()
+config.graph_options.optimizer_options.global_jit_level = tf.OptimizerOptions.ON_1
 
 x = tf.placeholder(tf.float32, shape=[None, None, 3])
 frame_width = tf.Variable(0, name='f_w', trainable=False)
@@ -130,7 +152,7 @@ frame_width_out = tf.Variable(0, name='f_w_o', trainable=False)
 frame_height_out = tf.Variable(0, name='f_h_o', trainable=False)
 y = detect(x, frame_width, frame_height, frame_width_out, frame_height_out)
 
-sess = tf.InteractiveSession()
+sess = tf.InteractiveSession(config=config)
 sess.run(tf.global_variables_initializer())
 
 # Add ops to save and restore all the variables.
@@ -147,7 +169,7 @@ capture = cv2.VideoCapture(video_file_name)
 if not capture.isOpened():
     print('Unable to open ', video_file_name)
 print('Capture opened')
-capture.set(cv2.CAP_PROP_POS_FRAMES, 1)
+capture.set(cv2.CAP_PROP_POS_FRAMES, 1)  # setting the initial frame number
 ret, frame = capture.read()
 fourcc = cv2.VideoWriter_fourcc(*'MJPG')
 videowriter = cv2.VideoWriter('output.avi',fourcc, 20.0, (int(frame.shape[1]), int(frame.shape[0])))
@@ -187,6 +209,11 @@ while True:
     results = sorted(results, key=itemgetter(0))
     print(results)
 
+    boxes_red = []
+    boxes_green = []
+    boxes_yellow = []
+    boxes_red_yellow = []
+
     show_all_scales = True
     # TODO
     if len(results) != 0:
@@ -200,29 +227,28 @@ while True:
             y_r = int(res[1])
             prob = res[2]
             sc = res[3]
+
             light_img = frame[y_r:y_r + int(cell_height * sc), x_r:x_r + int(cell_width * sc)]
             light_img_gray = cv2.cvtColor(light_img, cv2.COLOR_BGR2GRAY)
+
             start_hog = time.time()
             features = compute_hog(cv2.resize(light_img_gray, (20, 40)))
             features = compute_histograms(cv2.resize(light_img, (20, 40)), features)
             result_color = clasify(features)
             end_hog = time.time()
             print("Time of SVM prediction: " + str(end_hog-start_hog))
-            color = (255, 255, 255)
-            if result_color == 1:
-                print("Prediction: Red Light")
-                color = (0, 0, 255)
-            elif result_color == 2:
-                print("Prediction: Green Light")
-                color = (0, 255, 0)
-            elif result_color == 3:
-                print("Prediction: Yellow Light")
-                color = (0, 255, 255)
-            elif result_color == 4:
-                print("Prediction: Red-Yellow Light")
-                color = (0, 100, 255)
-            cv2.rectangle(frame_out, (x_r, y_r), (x_r + int(cell_width * sc), y_r + int(cell_height * sc)),
-                          color, 2)
+
+            if result_color != 0:
+                light = [x_r, y_r, x_r + int(cell_width * sc), y_r + int(cell_height * sc)]
+                if result_color == 1:
+                    boxes_red.append(light)
+                elif result_color == 2:
+                    boxes_green.append(light)
+                elif result_color == 3:
+                    boxes_yellow.append(light)
+                elif result_color == 4:
+                    boxes_red_yellow.append(light)
+
             print('X: ' + str(x_r) + ' Y: ' + str(y_r) + ' Result: ' + str(prob))
         else:
             if res[0] <= x_r+50 and res[1]<= y_r +50 and res[1]>= y_r -50:
@@ -252,6 +278,15 @@ while True:
                     cv2.rectangle(frame_out, (x_r, y_r), (x_r + int(cell_width * sc), y_r + int(cell_height * sc)),
                                   (0, 255, 0))
                     print('X: ' + str(x_r) + ' Y: ' + str(y_r) + ' Result: ' + str(prob))
+
+    if len(boxes_red) != 0:
+        boxes_red = merge_bounding_boxes(boxes_red, frame_out, (0, 0, 255))
+    if len(boxes_green) != 0:
+        boxes_green = merge_bounding_boxes(boxes_green, frame_out, (0, 255, 0))
+    if len(boxes_yellow) != 0:
+        boxes_yellow = merge_bounding_boxes(boxes_yellow, frame_out, (0, 255, 255))
+    if len(boxes_red_yellow) != 0:
+        boxes_red_yellow = merge_bounding_boxes(boxes_red_yellow, frame_out, (0, 100, 255))
 
     videowriter.write(frame_out)
     cv2.imshow('Frame', frame_out)
